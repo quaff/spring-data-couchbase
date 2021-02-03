@@ -15,7 +15,7 @@
  */
 package org.springframework.data.couchbase.core;
 
-import static com.couchbase.client.java.kv.ExistsOptions.*;
+import static com.couchbase.client.java.kv.ExistsOptions.existsOptions;
 
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
@@ -25,9 +25,12 @@ import reactor.util.function.Tuples;
 import java.util.Collection;
 import java.util.Map;
 
-import org.springframework.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.couchbase.core.support.PseudoArgs;
 
 import com.couchbase.client.java.kv.ExistsResult;
+import com.couchbase.client.java.kv.GetOptions;
 
 public class ReactiveExistsByIdOperationSupport implements ReactiveExistsByIdOperation {
 
@@ -39,23 +42,32 @@ public class ReactiveExistsByIdOperationSupport implements ReactiveExistsByIdOpe
 
 	@Override
 	public ReactiveExistsById existsById() {
-		return new ReactiveExistsByIdSupport(template, null);
+		return new ReactiveExistsByIdSupport(template, null, null, null);
 	}
 
 	static class ReactiveExistsByIdSupport implements ReactiveExistsById {
 
+		private static final Logger LOG = LoggerFactory.getLogger(ReactiveExistsByIdOperationSupport.class);
 		private final ReactiveCouchbaseTemplate template;
+		private final String scope;
 		private final String collection;
+		private final GetOptions options;
 
-		ReactiveExistsByIdSupport(final ReactiveCouchbaseTemplate template, final String collection) {
+		ReactiveExistsByIdSupport(final ReactiveCouchbaseTemplate template, final String scope, final String collection,
+				final GetOptions options) {
 			this.template = template;
+			this.scope = scope;
 			this.collection = collection;
+			this.options = options;
 		}
 
 		@Override
 		public Mono<Boolean> one(final String id) {
-			return Mono.just(id).flatMap(
-					docId -> template.getCollection(collection).reactive().exists(id, existsOptions()).map(ExistsResult::exists))
+			PseudoArgs<GetOptions> pArgs = new PseudoArgs<>(options, scope, collection);
+			LOG.info("statement: {} scope: {} collection: {}", "exitsById", pArgs.getScope(), pArgs.getCollection());
+			return Mono.just(id)
+					.flatMap(docId -> template.getCouchbaseClientFactory().withScope(pArgs.getScope())
+							.getCollection(pArgs.getCollection()).reactive().exists(id, existsOptions()).map(ExistsResult::exists))
 					.onErrorMap(throwable -> {
 						if (throwable instanceof RuntimeException) {
 							return template.potentiallyConvertRuntimeException((RuntimeException) throwable);
@@ -72,9 +84,18 @@ public class ReactiveExistsByIdOperationSupport implements ReactiveExistsByIdOpe
 		}
 
 		@Override
-		public TerminatingExistsById inCollection(final String collection) {
-			Assert.hasText(collection, "Collection must not be null nor empty.");
-			return new ReactiveExistsByIdSupport(template, collection);
+		public ExistsByIdWithOptions inCollection(final String collection) {
+			return new ReactiveExistsByIdSupport(template, scope, collection, options);
+		}
+
+		@Override
+		public TerminatingExistsById withOptions(GetOptions options) {
+			return new ReactiveExistsByIdSupport(template, scope, collection, options);
+		}
+
+		@Override
+		public ExistsByIdWithCollection inScope(String scope) {
+			return new ReactiveExistsByIdSupport(template, scope, collection, options);
 		}
 
 	}

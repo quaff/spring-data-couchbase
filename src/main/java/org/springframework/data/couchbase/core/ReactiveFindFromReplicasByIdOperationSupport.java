@@ -22,7 +22,9 @@ import reactor.core.publisher.Mono;
 
 import java.util.Collection;
 
-import org.springframework.util.Assert;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.couchbase.core.support.PseudoArgs;
 
 import com.couchbase.client.java.codec.RawJsonTranscoder;
 import com.couchbase.client.java.kv.GetAnyReplicaOptions;
@@ -37,29 +39,37 @@ public class ReactiveFindFromReplicasByIdOperationSupport implements ReactiveFin
 
 	@Override
 	public <T> ReactiveFindFromReplicasById<T> findFromReplicasById(Class<T> domainType) {
-		return new ReactiveFindFromReplicasByIdSupport<>(template, domainType, domainType, null);
+		return new ReactiveFindFromReplicasByIdSupport<>(template, domainType, domainType, null, null, null);
 	}
 
 	static class ReactiveFindFromReplicasByIdSupport<T> implements ReactiveFindFromReplicasById<T> {
 
+		private static final Logger LOG = LoggerFactory.getLogger(ReactiveFindFromReplicasByIdOperationSupport.class);
 		private final ReactiveCouchbaseTemplate template;
 		private final Class<?> domainType;
 		private final Class<T> returnType;
+		private final String scope;
 		private final String collection;
+		private final GetAnyReplicaOptions options;
 
 		ReactiveFindFromReplicasByIdSupport(ReactiveCouchbaseTemplate template, Class<?> domainType, Class<T> returnType,
-				String collection) {
+				String scope, String collection, GetAnyReplicaOptions options) {
 			this.template = template;
 			this.domainType = domainType;
 			this.returnType = returnType;
+			this.scope = scope;
 			this.collection = collection;
+			this.options = options;
 		}
 
 		@Override
 		public Mono<T> any(final String id) {
 			return Mono.just(id).flatMap(docId -> {
 				GetAnyReplicaOptions options = getAnyReplicaOptions().transcoder(RawJsonTranscoder.INSTANCE);
-				return template.getCollection(collection).reactive().getAnyReplica(docId, options);
+				PseudoArgs<GetAnyReplicaOptions> pArgs = new PseudoArgs<>(options, scope, collection);
+				LOG.info("statement: {} scope: {} collection: {}", "getAnyReplica", pArgs.getScope(), pArgs.getCollection());
+				return template.getCouchbaseClientFactory().withScope(pArgs.getScope()).getCollection(pArgs.getCollection())
+						.reactive().getAnyReplica(docId, pArgs.getOptions());
 			}).map(result -> template.support().decodeEntity(id, result.contentAs(String.class), result.cas(), returnType))
 					.onErrorMap(throwable -> {
 						if (throwable instanceof RuntimeException) {
@@ -76,9 +86,18 @@ public class ReactiveFindFromReplicasByIdOperationSupport implements ReactiveFin
 		}
 
 		@Override
-		public TerminatingFindFromReplicasById<T> inCollection(final String collection) {
-			Assert.hasText(collection, "Collection must not be null nor empty.");
-			return new ReactiveFindFromReplicasByIdSupport<>(template, domainType, returnType, collection);
+		public TerminatingFindFromReplicasById<T> withOptions(GetAnyReplicaOptions options) {
+			return new ReactiveFindFromReplicasByIdSupport<>(template, domainType, returnType, scope, collection, options);
+		}
+
+		@Override
+		public FindFromReplicasByIdWithOptions<T> inCollection(final String collection) {
+			return new ReactiveFindFromReplicasByIdSupport<>(template, domainType, returnType, scope, collection, options);
+		}
+
+		@Override
+		public FindFromReplicasByIdWithCollection<T> inScope(String scope) {
+			return new ReactiveFindFromReplicasByIdSupport<>(template, domainType, returnType, scope, collection, options);
 		}
 
 	}

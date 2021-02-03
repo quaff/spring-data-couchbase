@@ -21,8 +21,10 @@ import reactor.core.publisher.Mono;
 import java.time.Duration;
 import java.util.Collection;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.data.couchbase.core.mapping.CouchbaseDocument;
-import org.springframework.data.couchbase.core.mapping.Document;
+import org.springframework.data.couchbase.core.support.PseudoArgs;
 import org.springframework.util.Assert;
 
 import com.couchbase.client.core.msg.kv.DurabilityLevel;
@@ -32,6 +34,7 @@ import com.couchbase.client.java.kv.ReplicateTo;
 
 public class ReactiveInsertByIdOperationSupport implements ReactiveInsertByIdOperation {
 
+	private static final Logger LOG = LoggerFactory.getLogger(ReactiveInsertByIdOperationSupport.class);
 	private final ReactiveCouchbaseTemplate template;
 
 	public ReactiveInsertByIdOperationSupport(final ReactiveCouchbaseTemplate template) {
@@ -41,7 +44,7 @@ public class ReactiveInsertByIdOperationSupport implements ReactiveInsertByIdOpe
 	@Override
 	public <T> ReactiveInsertById<T> insertById(final Class<T> domainType) {
 		Assert.notNull(domainType, "DomainType must not be null!");
-		return new ReactiveInsertByIdSupport<>(template, domainType, null, PersistTo.NONE, ReplicateTo.NONE,
+		return new ReactiveInsertByIdSupport<>(template, domainType, null, null, null, PersistTo.NONE, ReplicateTo.NONE,
 				DurabilityLevel.NONE, null);
 	}
 
@@ -49,18 +52,22 @@ public class ReactiveInsertByIdOperationSupport implements ReactiveInsertByIdOpe
 
 		private final ReactiveCouchbaseTemplate template;
 		private final Class<T> domainType;
+		private final String scope;
 		private final String collection;
+		private final InsertOptions options;
 		private final PersistTo persistTo;
 		private final ReplicateTo replicateTo;
 		private final DurabilityLevel durabilityLevel;
 		private final Duration expiry;
 
-		ReactiveInsertByIdSupport(final ReactiveCouchbaseTemplate template, final Class<T> domainType,
-				final String collection, final PersistTo persistTo, final ReplicateTo replicateTo,
+		ReactiveInsertByIdSupport(final ReactiveCouchbaseTemplate template, final Class<T> domainType, final String scope,
+				final String collection, final InsertOptions options, final PersistTo persistTo, final ReplicateTo replicateTo,
 				final DurabilityLevel durabilityLevel, Duration expiry) {
 			this.template = template;
 			this.domainType = domainType;
+			this.scope = scope;
 			this.collection = collection;
+			this.options = options;
 			this.persistTo = persistTo;
 			this.replicateTo = replicateTo;
 			this.durabilityLevel = durabilityLevel;
@@ -71,8 +78,10 @@ public class ReactiveInsertByIdOperationSupport implements ReactiveInsertByIdOpe
 		public Mono<T> one(T object) {
 			return Mono.just(object).flatMap(o -> {
 				CouchbaseDocument converted = template.support().encodeEntity(o);
-				return template.getCollection(collection).reactive()
-						.insert(converted.getId(), converted.export(), buildInsertOptions(converted)).map(result -> {
+				PseudoArgs<InsertOptions> pArgs = new PseudoArgs(template, scope, collection);
+				LOG.info("statement: {} scope: {} collection: {}", "insertById", pArgs.getScope(), pArgs.getCollection());
+				return template.getCouchbaseClientFactory().withScope(pArgs.getScope()).getCollection(pArgs.getCollection())
+						.reactive().insert(converted.getId(), converted.export(), buildOptions(converted)).map(result -> {
 							Object updatedObject = template.support().applyUpdatedId(o, converted.getId());
 							return (T) template.support().applyUpdatedCas(updatedObject, result.cas());
 						});
@@ -90,7 +99,8 @@ public class ReactiveInsertByIdOperationSupport implements ReactiveInsertByIdOpe
 			return Flux.fromIterable(objects).flatMap(this::one);
 		}
 
-		private InsertOptions buildInsertOptions(CouchbaseDocument doc) { // CouchbaseDocument converted
+		@Override
+		public InsertOptions buildOptions(CouchbaseDocument doc) { // CouchbaseDocument converted
 			final InsertOptions options = InsertOptions.insertOptions();
 			if (persistTo != PersistTo.NONE || replicateTo != ReplicateTo.NONE) {
 				options.durability(persistTo, replicateTo);
@@ -107,31 +117,30 @@ public class ReactiveInsertByIdOperationSupport implements ReactiveInsertByIdOpe
 
 		@Override
 		public TerminatingInsertById<T> inCollection(final String collection) {
-			Assert.hasText(collection, "Collection must not be null nor empty.");
-			return new ReactiveInsertByIdSupport<>(template, domainType, collection, persistTo, replicateTo, durabilityLevel,
-					expiry);
+			return new ReactiveInsertByIdSupport<>(template, domainType, scope, collection, options, persistTo, replicateTo,
+					durabilityLevel, expiry);
 		}
 
 		@Override
 		public InsertByIdWithCollection<T> withDurability(final DurabilityLevel durabilityLevel) {
 			Assert.notNull(durabilityLevel, "Durability Level must not be null.");
-			return new ReactiveInsertByIdSupport<>(template, domainType, collection, persistTo, replicateTo, durabilityLevel,
-					expiry);
+			return new ReactiveInsertByIdSupport<>(template, domainType, scope, collection, options, persistTo, replicateTo,
+					durabilityLevel, expiry);
 		}
 
 		@Override
 		public InsertByIdWithCollection<T> withDurability(final PersistTo persistTo, final ReplicateTo replicateTo) {
 			Assert.notNull(persistTo, "PersistTo must not be null.");
 			Assert.notNull(replicateTo, "ReplicateTo must not be null.");
-			return new ReactiveInsertByIdSupport<>(template, domainType, collection, persistTo, replicateTo, durabilityLevel,
-					expiry);
+			return new ReactiveInsertByIdSupport<>(template, domainType, scope, collection, options, persistTo, replicateTo,
+					durabilityLevel, expiry);
 		}
 
 		@Override
 		public InsertByIdWithDurability<T> withExpiry(final Duration expiry) {
 			Assert.notNull(expiry, "expiry must not be null.");
-			return new ReactiveInsertByIdSupport<>(template, domainType, collection, persistTo, replicateTo, durabilityLevel,
-					expiry);
+			return new ReactiveInsertByIdSupport<>(template, domainType, scope, collection, options, persistTo, replicateTo,
+					durabilityLevel, expiry);
 		}
 	}
 

@@ -15,6 +15,8 @@
  */
 package org.springframework.data.couchbase.core;
 
+import com.couchbase.client.java.kv.GetAnyReplicaOptions;
+import org.springframework.data.couchbase.core.support.WithGetAnyReplicaOptions;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
 
@@ -22,6 +24,10 @@ import java.util.Collection;
 
 import org.springframework.data.couchbase.core.support.AnyIdReactive;
 import org.springframework.data.couchbase.core.support.WithCollection;
+import org.springframework.data.couchbase.core.support.WithGetOptions;
+import org.springframework.data.couchbase.core.support.WithScope;
+
+import com.couchbase.client.java.kv.GetOptions;
 
 public interface ReactiveFindFromReplicasByIdOperation {
 
@@ -35,11 +41,19 @@ public interface ReactiveFindFromReplicasByIdOperation {
 
 	}
 
-	interface FindFromReplicasByIdWithCollection<T> extends TerminatingFindFromReplicasById<T>, WithCollection<T> {
-
-		TerminatingFindFromReplicasById<T> inCollection(String collection);
+	interface FindFromReplicasByIdWithOptions<T> extends TerminatingFindFromReplicasById<T>, WithGetAnyReplicaOptions<T> {
+		TerminatingFindFromReplicasById<T> withOptions(GetAnyReplicaOptions options);
 	}
 
-	interface ReactiveFindFromReplicasById<T> extends FindFromReplicasByIdWithCollection<T> {}
+	interface FindFromReplicasByIdWithCollection<T> extends FindFromReplicasByIdWithOptions<T>, WithCollection<T> {
+		FindFromReplicasByIdWithOptions<T> inCollection(String collection);
+	}
+
+	interface FindFromReplicasByIdWithScope<T> extends FindFromReplicasByIdWithCollection<T>, WithScope<T> {
+		FindFromReplicasByIdWithCollection<T> inScope(String scope);
+	}
+
+
+	interface ReactiveFindFromReplicasById<T> extends FindFromReplicasByIdWithScope<T> {}
 
 }

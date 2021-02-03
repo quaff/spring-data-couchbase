@@ -18,12 +18,17 @@ package org.springframework.data.couchbase.core;
 import java.time.Duration;
 import java.util.Collection;
 
+import com.couchbase.client.java.kv.InsertOptions;
+import com.couchbase.client.java.kv.UpsertOptions;
 import org.springframework.data.couchbase.core.support.OneAndAllEntity;
 import org.springframework.data.couchbase.core.support.WithCollection;
 
 import com.couchbase.client.core.msg.kv.DurabilityLevel;
 import com.couchbase.client.java.kv.PersistTo;
 import com.couchbase.client.java.kv.ReplicateTo;
+import org.springframework.data.couchbase.core.support.WithInsertOptions;
+import org.springframework.data.couchbase.core.support.WithScope;
+import org.springframework.data.couchbase.core.support.WithUpsertOptions;
 
 public interface ExecutableInsertByIdOperation {
 
@@ -39,12 +44,19 @@ public interface ExecutableInsertByIdOperation {
 
 	}
 
-	interface InsertByIdWithCollection<T> extends TerminatingInsertById<T>, WithCollection<T> {
-
-		TerminatingInsertById<T> inCollection(String collection);
+	interface InsertByIdWithOptions<T> extends ExecutableInsertByIdOperation.TerminatingInsertById<T>, WithInsertOptions<T> {
+		ExecutableInsertByIdOperation.TerminatingInsertById<T> withOptions(InsertOptions options);
 	}
 
-	interface InsertByIdWithDurability<T> extends InsertByIdWithCollection<T>, WithDurability<T> {
+	interface InsertByIdWithCollection<T> extends InsertByIdWithOptions<T>, WithCollection<T> {
+		InsertByIdWithOptions<T> inCollection(String collection);
+	}
+
+	interface InsertByIdWithScope<T> extends InsertByIdWithCollection<T>, WithScope<T> {
+		InsertByIdWithCollection<T> inScope(String scope);
+	}
+
+	interface InsertByIdWithDurability<T> extends InsertByIdWithScope<T>, WithDurability<T> {
 
 		InsertByIdWithCollection<T> withDurability(DurabilityLevel durabilityLevel);
 

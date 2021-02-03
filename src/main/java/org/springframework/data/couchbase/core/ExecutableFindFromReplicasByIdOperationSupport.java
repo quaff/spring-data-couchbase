@@ -17,6 +17,8 @@ package org.springframework.data.couchbase.core;
 
 import java.util.Collection;
 
+import com.couchbase.client.java.kv.GetAnyReplicaOptions;
+import com.couchbase.client.java.kv.GetOptions;
 import org.springframework.data.couchbase.core.ReactiveFindFromReplicasByIdOperationSupport.ReactiveFindFromReplicasByIdSupport;
 import org.springframework.util.Assert;
 
@@ -30,7 +32,7 @@ public class ExecutableFindFromReplicasByIdOperationSupport implements Executabl
 
 	@Override
 	public <T> ExecutableFindFromReplicasById<T> findFromReplicasById(Class<T> domainType) {
-		return new ExecutableFindFromReplicasByIdSupport<>(template, domainType, domainType, null);
+		return new ExecutableFindFromReplicasByIdSupport<>(template, domainType, domainType, null, null, null);
 	}
 
 	static class ExecutableFindFromReplicasByIdSupport<T> implements ExecutableFindFromReplicasById<T> {
@@ -38,17 +40,21 @@ public class ExecutableFindFromReplicasByIdOperationSupport implements Executabl
 		private final CouchbaseTemplate template;
 		private final Class<?> domainType;
 		private final Class<T> returnType;
+		private final String scope;
 		private final String collection;
+		private final GetAnyReplicaOptions options;
 		private final ReactiveFindFromReplicasByIdSupport<T> reactiveSupport;
 
 		ExecutableFindFromReplicasByIdSupport(CouchbaseTemplate template, Class<?> domainType, Class<T> returnType,
-				String collection) {
+																					String scope, String collection, GetAnyReplicaOptions options) {
 			this.template = template;
 			this.domainType = domainType;
+			this.scope = scope;
 			this.collection = collection;
+			this.options = options;
 			this.returnType = returnType;
 			this.reactiveSupport = new ReactiveFindFromReplicasByIdSupport<>(template.reactive(), domainType, returnType,
-					collection);
+					scope, collection, options);
 		}
 
 		@Override
@@ -62,10 +68,20 @@ public class ExecutableFindFromReplicasByIdOperationSupport implements Executabl
 		}
 
 		@Override
-		public TerminatingFindFromReplicasById<T> inCollection(final String collection) {
-			Assert.hasText(collection, "Collection must not be null nor empty.");
-			return new ExecutableFindFromReplicasByIdSupport<>(template, domainType, returnType, collection);
+		public TerminatingFindFromReplicasById<T> withOptions(GetAnyReplicaOptions options) {
+			return new ExecutableFindFromReplicasByIdSupport<>(template, domainType, returnType, scope, collection, options);
 		}
+
+		@Override
+		public FindFromReplicasByIdWithOptions<T> inCollection(final String collection) {
+			return new ExecutableFindFromReplicasByIdSupport<>(template, domainType, returnType, scope, collection, options);
+		}
+
+		@Override
+		public FindFromReplicasByIdWithCollection<T> inScope(String scope) {
+			return new ExecutableFindFromReplicasByIdSupport<>(template, domainType, returnType, scope, collection, options);
+		}
+
 
 	}
 

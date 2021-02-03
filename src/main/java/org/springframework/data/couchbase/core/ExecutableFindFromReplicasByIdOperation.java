@@ -17,8 +17,13 @@ package org.springframework.data.couchbase.core;
 
 import java.util.Collection;
 
+import com.couchbase.client.java.kv.GetAnyReplicaOptions;
+import com.couchbase.client.java.kv.GetOptions;
 import org.springframework.data.couchbase.core.support.AnyId;
 import org.springframework.data.couchbase.core.support.WithCollection;
+import org.springframework.data.couchbase.core.support.WithGetAnyReplicaOptions;
+import org.springframework.data.couchbase.core.support.WithGetOptions;
+import org.springframework.data.couchbase.core.support.WithScope;
 
 public interface ExecutableFindFromReplicasByIdOperation {
 
@@ -32,11 +37,18 @@ public interface ExecutableFindFromReplicasByIdOperation {
 
 	}
 
-	interface FindFromReplicasByIdWithCollection<T> extends TerminatingFindFromReplicasById<T>, WithCollection<T> {
-
-		TerminatingFindFromReplicasById<T> inCollection(String collection);
+	interface FindFromReplicasByIdWithOptions<T> extends TerminatingFindFromReplicasById<T>, WithGetAnyReplicaOptions<T> {
+		TerminatingFindFromReplicasById<T> withOptions(GetAnyReplicaOptions options);
 	}
 
-	interface ExecutableFindFromReplicasById<T> extends FindFromReplicasByIdWithCollection<T> {}
+	interface FindFromReplicasByIdWithCollection<T> extends FindFromReplicasByIdWithOptions<T>, WithCollection<T> {
+		FindFromReplicasByIdWithOptions<T> inCollection(String collection);
+	}
+
+	interface FindFromReplicasByIdWithScope<T> extends FindFromReplicasByIdWithCollection<T>, WithScope<T> {
+		FindFromReplicasByIdWithCollection<T> inScope(String scope);
+	}
+
+	interface ExecutableFindFromReplicasById<T> extends FindFromReplicasByIdWithScope<T> {}
 
 }

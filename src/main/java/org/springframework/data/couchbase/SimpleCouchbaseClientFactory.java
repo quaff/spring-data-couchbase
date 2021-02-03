@@ -74,7 +74,7 @@ public class SimpleCouchbaseClientFactory implements CouchbaseClientFactory {
 
 	@Override
 	public CouchbaseClientFactory withScope(final String scopeName) {
-		return new SimpleCouchbaseClientFactory(cluster, bucket.name(), scopeName);
+		return new SimpleCouchbaseClientFactory(cluster, bucket.name(), scopeName != null ? scopeName : getScope().name());
 	}
 
 	@Override
